@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filters"
+version = "0.0.0"
+description = "Kalman filter implementations"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Greyson Brothers", email = "greysonbrothers@gmail.com" }
+]
+classifiers = [
+  "Programming Language :: Python :: 3"
+]
+dependencies = [
+    "tqdm",
+    "numpy",
+    "matplotlib",
+]
+
+[project.urls]
+Homepage = "https://github.com/agbrothers/filters"
+Issues = "https://github.com/agbrothers/filters/issues"
