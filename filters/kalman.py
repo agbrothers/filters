@@ -28,25 +28,23 @@ class KalmanFilter:
         self.residual_hist = []
 
 
-    def step(self, actions:Actions, time:float, z=None):
+    def step(self, actions:Actions, time:float, obs=None, z=None):
         ## VALIDATE TIMESTEP
         assert time >= self.dt and time / self.dt % 1 == 0, \
             "Filter `dt` must cleanly divide step `time`"
 
         ## DYANMICS UPDATE(S)
+        PHI, Q, u = self.dynamics.update(actions, self.dt)
         for t in range(int(time / self.dt)):
-            x_new, P_new = self.dynamics_update(actions, self.dt)
+            x_new, P_new = self.dynamics_update(PHI, Q, u)
         
         ## MEASUREMENT UPDATE
-        if z is not None:
-            x_new, P_new = self.measurement_update(z, x_new, P_new)
+        if obs is not None and z is not None:
+            x_new, P_new = self.measurement_update(obs, z, x_new, P_new)
         return x_new, P_new
 
 
-    def dynamics_update(self, actions:Actions, dt:float):
-        ## UPDATE DYAMICS MODEL
-        PHI, Q, u = self.dynamics.update(actions, dt)
-
+    def dynamics_update(self, PHI, Q, u):
         ## PROPAGATE DYNAMICS
         x_new = PHI @ self.x + u
         P_new = PHI @ self.P @ PHI.T + Q
@@ -55,12 +53,12 @@ class KalmanFilter:
         return x_new, P_new
 
 
-    def measurement_update(self, z, x=None, P=None):
+    def measurement_update(self, obs, z, x=None, P=None):
         if x is None: x = self.x
         if P is None: P = self.P
 
         ## INFERENCE MEASUREMENT MODEL
-        y, H, R = self.measurement.update(x, z)
+        y, H, R = self.measurement.update(obs, x, z)
 
         ## COMPUTE KALMAN GAIN (JOSEPH FORM)
         S = H @ P @ H.T + R
@@ -70,6 +68,9 @@ class KalmanFilter:
         residual = y - H @ x
         x_new = x + K @ residual
         P_new = P - K @ H @ P
+        # IKH = np.eye(len(x)) - K @ H
+        # P_new = IKH @ P @ IKH.T + K @ R @ K.T
+        # P_new = 0.5 * (P + P.T)
 
         ## UPDATE HISTORY
         self.x_hist[-1] = x_new
@@ -102,22 +103,23 @@ class KalmanFilter:
 if __name__ == "__main__":
 
     from filters.sensors.beacon import BeaconSensor
-    from filters.dynamics.linear import LinearDynamics2D
-    from filters.measurement.range import BeaconRangeModel, Beacon
+    from filters.dynamics.linear import LinearDynamics2D, State
+    from filters.measurement.beacon import BeaconRangeModel, Beacon
 
     ## STATE PRIOR
     pos = np.array([0.0, 0.0])
     vel = np.array([0.5, 1.0]) 
     x = np.concatenate([pos, vel])
+    idxs = np.array([State.POS_X.value, State.POS_Y.value])
     
     ## UNCERTAINTY PRIOR
     state_std=np.array([0.01, 0.01, 0.1, 0.1])
     P = np.eye(len(x)) * state_std # Prior uncertainty
 
     beacons = [
-        Beacon( 1, 0),
+        Beacon( 1, -0.1),
         Beacon( 0, 2),
-        Beacon(-3, 0),
+        Beacon(-3, 0.1),
     ]
     beacon_std = np.array([
         0.01,
@@ -132,7 +134,7 @@ if __name__ == "__main__":
     z = np.concatenate([s(obs, x) for s in sensors])
 
     ## BUILD FILTER
-    measurement = BeaconRangeModel(beacons, beacon_std)
+    measurement = BeaconRangeModel(beacons, beacon_std, idxs, len(x))
     dynamics = LinearDynamics2D(state_std, dt=0.1)
     kf = KalmanFilter(
         x, P,
@@ -142,3 +144,31 @@ if __name__ == "__main__":
 
     ## STEP FILTER
     kf.step(Actions(0.0, 0.0), time=1, z=z)
+
+
+
+    ## RANGE VERSION
+    from filters.sensors.range import RangeSensor
+    from filters.measurement.range import RangeModel
+
+    x = np.array([1,1,0,0]) # Prior state
+    targets = ["A","B","C"]
+    std = np.array([0.1, 0.2, 0.3])
+    obs = {
+        "A": np.array([0,2,0,0]),
+        "B": np.array([2,0,0,0]),
+        "C": np.array([-1,-1,0,0]),
+    }
+    sensors = [RangeSensor(name, std) for name,std in zip(targets, std)]
+    z = np.concatenate([s(obs, x) for s in sensors])
+
+    ## BUILD FILTER
+    measurent = RangeModel(targets, std, idxs, len(x))
+    kf = KalmanFilter(
+        x, P,
+        measurement=measurement,
+        dynamics=dynamics,
+    )
+    ## STEP FILTER
+    kf.step(Actions(0.0, 0.0), time=1, z=z)
+
