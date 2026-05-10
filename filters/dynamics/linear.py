@@ -32,7 +32,7 @@ class LinearDynamics2D:
             [ 0, 0, 0, 0],
         ])
         self.PHI = np.eye(n) + self.F * dt 
-        
+
         ## PLOTTING
         self.x_hist = []
 
@@ -50,7 +50,7 @@ class LinearDynamics2D:
         return self.PHI, self.Q, self.u
 
 
-    def step(self, x:np.ndarray, actions:Actions, time:float):
+    def step(self, actions:Actions, time:float):
         ## VALIDATE TIMESTEP
         assert time >= self.dt and time / self.dt % 1 == 0, \
             "Dynamics `dt` must cleanly divide step `time`"
@@ -59,7 +59,7 @@ class LinearDynamics2D:
         self.update(actions, self.dt) 
         ## Zero-order hold
         for t in range(int(time / self.dt)):
-            x = self.PHI @ x + self.u
+            x = self.PHI @ self.x + self.u
             self.x_hist.append(x)
         return x
 
